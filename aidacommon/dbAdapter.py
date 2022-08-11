@@ -445,6 +445,71 @@ class DBC(metaclass=ABCMeta):
         result = "time: "+ str(rt)
         #return result;
         return func(self, *args, **kwargs);
+    
+    def _Preprocess(self, func, *args, **kwargs):
+        if(isinstance(func, str)):
+            func = super().__getattribute__(func);
+        start_time = time.time();
+        pred = func(self, *args, **kwargs);
+        end_time = time.time();
+        rt = end_time - start_time;
+        result = "time: "+ str(rt)
+        #return result;
+        return pred;
+
+    def _MLP(self, model, criterion, optimizer, epochs, time_limit, using_gpu):
+        self.epoch_done = 0
+        self.epoch_total = epochs
+        self.stop = False
+
+        def iterate(dw,iter_num,time_limit,using_GPU):
+            psutil.cpu_percent()
+            model = dw.model
+            normed_train_data = dw.normed_train_data
+            train_target = dw.train_target
+            criterion = dw.criterion
+            start = time.time()
+            num_finish = 0;
+
+            for i in range (iter_num):
+                if(time.time() - start < time_limit):
+                    predicted = model(normed_train_data)
+                    loss = criterion(predicted, train_target)
+                    loss.backward()
+                    optimizer.step()
+                    optimizer.zero_grad()
+                else:
+                    num_finish = i;
+                    break;
+                if(dw.stop):
+                    num_finish = i;
+                    logging.info("stopped")
+                    break;
+
+        if( num_finish == 0):
+            num_finish = iter_num;
+        epoch_done = dw.epoch_done + num_finish
+        dw.epoch_done = epoch_done
+        logging.info("total iter:"+str(num_finish))
+        logging.info("totally end time"+ str(time.time() - start))
+        return [(time.time() - start),num_finish,psutil.cpu_percent()]
+
+        def condition(dw,using_GPU):
+            if dw.epoch_done >= dw.epoch_total:
+                return True
+            else:
+                return False
+
+        def test_model(dw,using_GPU):
+            normed_test_data = dw.normed_test_data
+            test_target = dw.test_target
+            predicted = dw.model(normed_test_data)
+            loss = dw.criterion(predicted, test_target)
+            #return_mesg = "the loss of the model is: " + str(loss)
+            return_mesg = ""
+            return return_mesg
+
+        return self._job(iterate, condition, test_model)
 
     def _Schedule(self,iter_func,cond_func,test_func,name,*args,**kwargs):
         """Function that is called from stub to execute a python function in this workspace between cpu and gpu"""

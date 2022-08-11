@@ -299,6 +299,10 @@ class DBCRemoteStub(aidacommon.rop.RObjStub):
         pass
 
     @aidacommon.rop.RObjStub.RemoteMethod()
+    def _MLP(self, model, criterion, optimizer, epochs, time_limit, using_gpu, *args, **kwargs):
+        pass
+
+    @aidacommon.rop.RObjStub.RemoteMethod()
     def _XP(self, func, *args, **kwargs):
         pass
 
