@@ -288,7 +288,10 @@ class DBCRemoteStub(aidacommon.rop.RObjStub):
     @aidacommon.rop.RObjStub.RemoteMethod()
     def _Schedule(self,iter_func,cond_func,test_func,*args,**kwargs):
         pass
-    
+
+    @aidacommon.rop.RObjStub.RemoteMethod()
+    def _Preprocess(self, func, dataset, *args, **kwargs):
+        pass
     
     @aidacommon.rop.RObjStub.RemoteMethod()
     def _append(self,iter_func,cond_func,test_func,name,*args,**kwargs):
@@ -299,7 +302,7 @@ class DBCRemoteStub(aidacommon.rop.RObjStub):
         pass
 
     @aidacommon.rop.RObjStub.RemoteMethod()
-    def _MLP(self, model, criterion, optimizer, epochs, time_limit, using_gpu, *args, **kwargs):
+    def _MLP(self, model, criterion, optimizer, epochs, time_limit, name, using_gpu,*args, **kwargs):
         pass
 
     @aidacommon.rop.RObjStub.RemoteMethod()

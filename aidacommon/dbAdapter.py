@@ -446,22 +446,28 @@ class DBC(metaclass=ABCMeta):
         #return result;
         return func(self, *args, **kwargs);
     
-    def _Preprocess(self, func, *args, **kwargs):
+    def _Preprocess(self, func, dataset, *args, **kwargs):
         if(isinstance(func, str)):
             func = super().__getattribute__(func);
+        self.dataset = dataset
         start_time = time.time();
-        pred = func(self, *args, **kwargs);
+        pred = func(self, dataset, *args, **kwargs);
         end_time = time.time();
         rt = end_time - start_time;
         result = "time: "+ str(rt)
         #return result;
         return pred;
 
-    def _MLP(self, model, criterion, optimizer, epochs, time_limit, using_gpu):
+    def _MLP(self, model, criterion, optimizer, epochs, time_limit, name, using_gpu, *args, **kwargs):      
         self.epoch_done = 0
         self.epoch_total = epochs
+        self.model = model
+        self.criterion = criterion
+        self.optimizer = optimizer
+        self.epochs = epochs
+        self.time_limit = time_limit
+        self.using_gpu = using_gpu
         self.stop = False
-
         def iterate(dw,iter_num,time_limit,using_GPU):
             psutil.cpu_percent()
             model = dw.model
@@ -486,13 +492,13 @@ class DBC(metaclass=ABCMeta):
                     logging.info("stopped")
                     break;
 
-        if( num_finish == 0):
-            num_finish = iter_num;
-        epoch_done = dw.epoch_done + num_finish
-        dw.epoch_done = epoch_done
-        logging.info("total iter:"+str(num_finish))
-        logging.info("totally end time"+ str(time.time() - start))
-        return [(time.time() - start),num_finish,psutil.cpu_percent()]
+            if( num_finish == 0):
+                num_finish = iter_num;
+            epoch_done = dw.epoch_done + num_finish
+            dw.epoch_done = epoch_done
+            logging.info("total iter:"+str(num_finish))
+            logging.info("totally end time"+ str(time.time() - start))
+            return [(time.time() - start),num_finish,psutil.cpu_percent()]
 
         def condition(dw,using_GPU):
             if dw.epoch_done >= dw.epoch_total:
@@ -509,7 +515,7 @@ class DBC(metaclass=ABCMeta):
             return_mesg = ""
             return return_mesg
 
-        return self._job(iterate, condition, test_model)
+        return self._job(iterate, condition, test_model, name)
 
     def _Schedule(self,iter_func,cond_func,test_func,name,*args,**kwargs):
         """Function that is called from stub to execute a python function in this workspace between cpu and gpu"""
