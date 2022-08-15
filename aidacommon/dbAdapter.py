@@ -451,12 +451,19 @@ class DBC(metaclass=ABCMeta):
             func = super().__getattribute__(func);
         self.dataset = dataset
         start_time = time.time();
-        pred = func(self, dataset, *args, **kwargs);
+        normed_train_data, train_target, normed_test_data, test_target  = func(dataset, *args, **kwargs);
+
+        # Record processed dataset in dw instance.
+        self.normed_train_data = normed_train_data
+        self.train_target = train_target
+        self.normed_test_data = normed_test_data
+        self.test_target = test_target
+
         end_time = time.time();
         rt = end_time - start_time;
         result = "time: "+ str(rt)
         #return result;
-        return pred;
+        return normed_train_data, train_target, normed_test_data, test_target;
 
     def _MLP(self, model, criterion, optimizer, epochs, time_limit, name, using_gpu, *args, **kwargs):      
         self.epoch_done = 0
