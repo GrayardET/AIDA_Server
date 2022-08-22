@@ -29,3 +29,7 @@ class biLSTM(torch.nn.Module):
         x = self.dense2(x)
         # print(f'shape after all dense layers: {x.shape}')
         return x
+
+class Model(torch.nn.Module):
+    pass
+

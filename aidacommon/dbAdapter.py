@@ -44,6 +44,7 @@ import sys
 import torch.nn as nn
 import torch.nn.functional as F
 import GPUtil
+from types import MethodType
 
 
 
@@ -451,21 +452,21 @@ class DBC(metaclass=ABCMeta):
             func = super().__getattribute__(func);
         self.dataset = dataset
         start_time = time.time();
-        normed_train_data, train_target, normed_test_data, test_target  = func(dataset, *args, **kwargs);
-
+        #self.x_train, self.y_train, self.x_test, self.y_test = None, None, None, None
+        processed_data  = func(self, dataset, *args, **kwargs);
+            
         # Record processed dataset in dw instance.
-        self.normed_train_data = normed_train_data
-        self.train_target = train_target
-        self.normed_test_data = normed_test_data
-        self.test_target = test_target
 
         end_time = time.time();
         rt = end_time - start_time;
         result = "time: "+ str(rt)
         #return result;
-        return normed_train_data, train_target, normed_test_data, test_target;
+        return processed_data;
 
-    def _MLP(self, model, criterion, optimizer, epochs, time_limit, name, using_gpu, *args, **kwargs):      
+    def _MLP(self, model, forward, criterion, optimizer, epochs, time_limit, name, *args, **kwargs):      
+        """
+        model_functions are the ones passed from the Client side to the Server for defining a pytorch model. It will then be added to the Model instance as class methods. Note: it must contain method named "forward()"
+        """
         self.epoch_done = 0
         self.epoch_total = epochs
         self.model = model
@@ -473,21 +474,21 @@ class DBC(metaclass=ABCMeta):
         self.optimizer = optimizer
         self.epochs = epochs
         self.time_limit = time_limit
-        self.using_gpu = using_gpu
         self.stop = False
+        model.forward = MethodType(forward, model)
         def iterate(dw,iter_num,time_limit,using_GPU):
             psutil.cpu_percent()
             model = dw.model
-            normed_train_data = dw.normed_train_data
-            train_target = dw.train_target
+            x_train = dw.x_train
+            y_train  = dw.y_train
             criterion = dw.criterion
             start = time.time()
             num_finish = 0;
 
             for i in range (iter_num):
                 if(time.time() - start < time_limit):
-                    predicted = model(normed_train_data)
-                    loss = criterion(predicted, train_target)
+                    predicted = model(x_train)
+                    loss = criterion(predicted, y_train)
                     loss.backward()
                     optimizer.step()
                     optimizer.zero_grad()
@@ -499,7 +500,7 @@ class DBC(metaclass=ABCMeta):
                     logging.info("stopped")
                     break;
 
-            if( num_finish == 0):
+            if(num_finish == 0):
                 num_finish = iter_num;
             epoch_done = dw.epoch_done + num_finish
             dw.epoch_done = epoch_done
@@ -507,21 +508,24 @@ class DBC(metaclass=ABCMeta):
             logging.info("totally end time"+ str(time.time() - start))
             return [(time.time() - start),num_finish,psutil.cpu_percent()]
 
-        def condition(dw,using_GPU):
+        def condition(dw, using_GPU):
             if dw.epoch_done >= dw.epoch_total:
                 return True
             else:
                 return False
 
-        def test_model(dw,using_GPU):
-            normed_test_data = dw.normed_test_data
-            test_target = dw.test_target
-            predicted = dw.model(normed_test_data)
-            loss = dw.criterion(predicted, test_target)
+        def test_model(dw, using_GPU):
+            
+            if self.x_test == None or self.y_test == None:
+                return "No x_test or y_test provided"
+            x_test = dw.x_test
+            y_test = dw.y_test
+            predicted = dw.model(x_test)
+            loss = dw.criterion(predicted,y_test)
             #return_mesg = "the loss of the model is: " + str(loss)
             return_mesg = ""
             return return_mesg
-
+            
         return self._job(iterate, condition, test_model, name)
 
     def _Schedule(self,iter_func,cond_func,test_func,name,*args,**kwargs):

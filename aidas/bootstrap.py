@@ -128,7 +128,8 @@ def bootstrap():
 
 
 
-    from aidas.models import biLSTM;
+    from aidas.models import biLSTM 
+    from aidas.models import Model
 
 
     builtins.DataConversion = DataConversion;

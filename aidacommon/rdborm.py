@@ -2,7 +2,7 @@ import copyreg;
 
 from aidacommon.dborm import *;
 import aidacommon.rop;
-from aidas.models import biLSTM;
+from aidas.models import *;
 class TabularDataRemoteStub(aidacommon.rop.RObjStub, TabularData):
 
     @aidacommon.rop.RObjStub.RemoteMethod()
@@ -302,7 +302,7 @@ class DBCRemoteStub(aidacommon.rop.RObjStub):
         pass
 
     @aidacommon.rop.RObjStub.RemoteMethod()
-    def _MLP(self, model, criterion, optimizer, epochs, time_limit, name, using_gpu,*args, **kwargs):
+    def _MLP(self, model, forward, criterion, optimizer, epochs,  time_limit, name, *args, **kwargs):
         pass
 
     @aidacommon.rop.RObjStub.RemoteMethod()
