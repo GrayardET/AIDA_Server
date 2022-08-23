@@ -1,4 +1,5 @@
 from aida.aida import *;
+import GPUtil
 import sys
 import numpy as np
 import os.path
@@ -22,19 +23,20 @@ Niter = int(sys.argv[2])
 
 st_data = time.time()
 new_lineitem_df= dw.lineitem.project(('l_quantity', 'l_extendedprice')).filter(Q('l_quantity',10,CMP.LT))
-#new_lineitem_df= dw.lineitem.project(('l_quantity', 'l_extendedprice'))
+#new_lineitem_df= dw.lineitem.project(('l_quantity', 'l_extendedprice')).head(head_num)
 en_1 = time.time()
 print("read to aida:"+str(en_1-st_data))
 def process(self,data):
-    st_1 = time.time()
-    for i in range(20):
-        data = copy.copy(data.rows);
+    data = copy.copy(data.rows);
     st_2 = time.time()
-    logging.info("copy data"+str(st_2-st_1))
+    #logging.info("copy data"+str(st_2-st_1))
     data_df = pd.DataFrame(data,columns=['l_quantity', 'l_extendedprice'])
+    data_df = data_df.head(100000)
     norm_df = (data_df-data_df.mean())/data_df.std()
     x = torch.tensor(norm_df.values.astype(np.float32))
     x = x.view(x.shape[0],2)
+    if x.size()[1] != 2:
+        x = torch.transpose(x,0,1)
     en_2 = time.time()
     logging.info("process data"+str(en_2-st_2))
     self.x = x
@@ -57,10 +59,14 @@ def k_means(dw, time_limit, x, c=0, cl=0,  K=10, Niter=10, verbose=False, if_gpu
 
     if isinstance(c, int) and c == 0:
         c = x[:K, :].clone()  # Simplistic initialization for the centroids
+        logging.info(' x size'+str(x.size()))
+        logging.info('c size'+str(c.size()))
+        logging.info('K is'+str(K))
     elif c.size()[1] != 2:
         c = torch.transpose(c,0,1)
     if if_gpu:
         x_i = dw.LazyTensor(x.view(N, 1, D))  # (N, 1, D) samples
+        logging.info('size'+str(c.size()))
         c_j = dw.LazyTensor(c.view(1, K, D))  # (1, K, D) centroids
     else:
         x_i = x.view(N, 1, D)  # (N, 1, D) samples
@@ -98,11 +104,13 @@ def k_means(dw, time_limit, x, c=0, cl=0,  K=10, Niter=10, verbose=False, if_gpu
     return cl, c,num_finish
 
 dw.k_means = k_means
+dw.stop = False
 
 def trainingLoop(dw,iter_num,time_limit,using_GPU):
     start = time.time()
     cl = dw.cl
     c = dw.c
+    print(c)
     k_means = dw.k_means
     K, dtype = dw.K, dw.dtype
     #device_id = "cuda:0"
@@ -116,9 +124,10 @@ def trainingLoop(dw,iter_num,time_limit,using_GPU):
     dw.timeArray.append(end-start)
     dw.epoch_done += num_finish
     dw.finishedEpochArray.append(dw.epoch_done)
-    return [(time.time() - start),num_finish]
+    gpus = GPUtil.getGPUs()
+    return [(time.time() - start),num_finish,gpus[1].load*100,psutil.cpu_percent()]
 
-def Condition(dw):
+def Condition(dw,use_GPU):
     if dw.epoch_done >= dw.epoch_total:
         return True
     else:
@@ -127,7 +136,8 @@ def Condition(dw):
 def Testing(dw,using_GPU):
     pass
 
-timeUsed = dw._job(trainingLoop, Condition, Testing, name)
+timeUsed = dw._X(trainingLoop,dw.epoch_total,1000000000,False)
+#timeUsed = dw._job(trainingLoop, Condition, Testing, name)
 print(dw.timeArray)
 print(dw.finishedEpochArray)
 Niter = dw.epoch_done

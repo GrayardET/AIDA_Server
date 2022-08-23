@@ -45,6 +45,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import GPUtil
 from types import MethodType
+from pykeops.torch import LazyTensor
 
 
 
@@ -463,6 +464,94 @@ class DBC(metaclass=ABCMeta):
         #return result;
         return processed_data;
 
+    def _KMeans(self, epochs, clusters):
+        self.epoch_total = epochs
+        self.K = clusters
+        self.cl, self.c = 0,0
+        self.epoch_done = 0
+        def k_means(dw, time_limit, x, c=0, cl=0,  K=10, Niter=10, verbose=False, if_gpu=True):
+            start = time.time()
+            N, D = x.shape  # Number of samples, dimension of the ambient space
+            num_finish = -1
+
+            if isinstance(c, int) and c == 0:
+                c = x[:K, :].clone()  # Simplistic initialization for the centroids
+                logging.info(' x size'+str(x.size()))
+                logging.info('c size'+str(c.size()))
+                logging.info('K is'+str(K))
+            elif c.size()[1] != 2:
+                c = torch.transpose(c,0,1)
+            if if_gpu:
+                x_i = LazyTensor(x.view(N, 1, D))  # (N, 1, D) samples
+                logging.info('size'+str(c.size()))
+                c_j = LazyTensor(c.view(1, K, D))  # (1, K, D) centroids
+            else:
+                x_i = x.view(N, 1, D)  # (N, 1, D) samples
+                c_j = c.view(1, K, D)  # (1, K, D) centroids
+
+            # K-means loop:
+            # - x  is the (N, D) point cloud,
+            # - cl is the (N,) vector of class labels
+            # - c  is the (K, D) cloud of cluster centroids
+            for i in range(Niter):
+
+                if(time.time() - start < time_limit):
+                    # E step: assign points to the closest cluster -------------------------
+                    D_ij = ((x_i - c_j) ** 2).sum(-1)  # (N, K) symbolic squared distances
+                    cl = D_ij.argmin(dim=1).long().view(-1)  # Points -> Nearest cluster
+                    #logging.info("cl"+str(cl))
+
+                    # M step: update the centroids to the normalized cluster average: ------
+                    # Compute the sum of points per cluster:
+                    c.zero_()
+                    c.scatter_add_(0, cl[:, None].repeat(1, D), x)
+
+                    # Divide by the number of points per cluster:
+                    Ncl = torch.bincount(cl, minlength=K).type_as(c).view(K,1)
+                    c /= Ncl  # in-place division to compute the average
+                else:
+                    num_finish = i;
+                    break;
+                if(dw.stop):
+                    num_finish = i;
+                    break;
+            if(num_finish == -1):
+                num_finish = Niter;
+
+            return cl, c,num_finish
+
+        def trainingLoop(dw,iter_num,time_limit,using_GPU):
+            start = time.time()
+            cl = dw.cl
+            c = dw.c
+            print(c)
+            K = dw.K
+            #device_id = "cuda:0"
+            #remaining = dw.Niter - dw.finishedEpoch
+            x = dw.x
+            Niter = iter_num
+            cl, c,num_finish = k_means(dw,time_limit,x, c, cl, K, Niter=Niter, if_gpu = using_GPU)
+            dw.cl = cl
+            dw.c = c
+            end = time.time()
+            #dw.timeArray.append(end-start)
+            dw.epoch_done += num_finish
+            #dw.finishedEpochArray.append(dw.epoch_done)
+            gpus = GPUtil.getGPUs()
+            return [(time.time() - start),num_finish,gpus[1].load*100,psutil.cpu_percent()]
+
+        def Condition(dw,use_GPU):
+            if dw.epoch_done >= dw.epoch_total:
+                return True
+            else:
+                return False
+
+        def Testing(dw,using_GPU):
+            pass
+
+        return self._job(trainingLoop, Condition, Testing, "kmeans")
+    
+
     def _MLP(self, model, forward, criterion, optimizer, epochs, time_limit, name, *args, **kwargs):      
         """
         model_functions are the ones passed from the Client side to the Server for defining a pytorch model. It will then be added to the Model instance as class methods. Note: it must contain method named "forward()"
@@ -516,8 +605,8 @@ class DBC(metaclass=ABCMeta):
 
         def test_model(dw, using_GPU):
             
-            if self.x_test == None or self.y_test == None:
-                return "No x_test or y_test provided"
+            #if self.x_test == None or self.y_test == None:
+                #return "No x_test or y_test provided"
             x_test = dw.x_test
             y_test = dw.y_test
             predicted = dw.model(x_test)

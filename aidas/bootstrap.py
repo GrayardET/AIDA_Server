@@ -105,7 +105,8 @@ def bootstrap():
     import torch.nn as nn;
     builtins.nn = nn;
     builtins.torch = torch;
-
+    
+    from pykeops.torch import LazyTensor
     from tensorflow import keras
     builtins.keras = keras
     from tensorflow.keras import layers

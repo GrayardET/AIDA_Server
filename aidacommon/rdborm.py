@@ -294,6 +294,10 @@ class DBCRemoteStub(aidacommon.rop.RObjStub):
         pass
     
     @aidacommon.rop.RObjStub.RemoteMethod()
+    def _KMeans(self, epochs, clusters):
+        pass
+
+    @aidacommon.rop.RObjStub.RemoteMethod()
     def _append(self,iter_func,cond_func,test_func,name,*args,**kwargs):
         pass
 
